@@ -9,6 +9,10 @@ import os
 import cPickle
 import numpy as np
 
+"""
+This file has some functions which are used by pascal_voc.py. That's it
+"""
+
 def parse_rec(filename):
     """ Parse a PASCAL VOC xml file """
     tree = ET.parse(filename)

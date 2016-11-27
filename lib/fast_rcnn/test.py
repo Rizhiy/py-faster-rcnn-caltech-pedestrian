@@ -252,12 +252,14 @@ def test_net(net, imdb, max_per_image=100, thresh=0.05, vis=False):
             # that have the gt_classes field set to 0, which means there's no
             # ground truth.
             box_proposals = roidb[i]['boxes'][roidb[i]['gt_classes'] == 0]
-
+        
         im = cv2.imread(imdb.image_path_at(i))
         _t['im_detect'].tic()
+        #govind: for testing the box_proposals is set to None
+        #govind: scores is RxK, boxes is Rx(4K)
         scores, boxes = im_detect(net, im, box_proposals)
         _t['im_detect'].toc()
-
+    
         _t['misc'].tic()
         # skip j = 0, because it's the background class
         for j in xrange(1, imdb.num_classes):
@@ -267,6 +269,10 @@ def test_net(net, imdb, max_per_image=100, thresh=0.05, vis=False):
             cls_dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])) \
                 .astype(np.float32, copy=False)
             keep = nms(cls_dets, cfg.TEST.NMS)
+            #govind: cls_dets contains all the occurances of objects
+            # of current class(=j) in current image (=i)
+            #govind: Every row is one detection. Having 4
+            # coordinates and 1 cls_score
             cls_dets = cls_dets[keep, :]
             if vis:
                 vis_detections(im, imdb.classes[j], cls_dets)
@@ -287,6 +293,7 @@ def test_net(net, imdb, max_per_image=100, thresh=0.05, vis=False):
               .format(i + 1, num_images, _t['im_detect'].average_time,
                       _t['misc'].average_time)
 
+    #govind: Writing the results of test operation to file
     det_file = os.path.join(output_dir, 'detections.pkl')
     with open(det_file, 'wb') as f:
         cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)

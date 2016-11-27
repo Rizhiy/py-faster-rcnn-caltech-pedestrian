@@ -16,33 +16,37 @@ import utils.cython_bbox
 import cPickle
 import subprocess
 import uuid
-from voc_eval import voc_eval
+from caltech_utils import caltech_eval
 from fast_rcnn.config import cfg
 
-class pascal_voc(imdb):
+class caltech(imdb):
     def __init__(self, image_set, year, devkit_path=None):
-        imdb.__init__(self, 'voc_' + year + '_' + image_set)
-        self._year = year
-        #govind: From the definition of image_path_from_index() the possible
-        #values of image_set is "train", "test" or "val"
+        #govind: values of image_set is "train", "test" or "val"
+        #govind: Ignoring year for now
+        #govind: devkit_path is path to dataset directory
+    
+        imdb.__init__(self, 'caltech_' + image_set)
+        self._year = str(year)
         self._image_set = image_set
         self._devkit_path = self._get_default_path() if devkit_path is None \
                             else devkit_path
-        self._data_path = os.path.join(self._devkit_path, 'VOC' + self._year)
+        self._data_path = os.path.join(self._devkit_path, 'data')
+        self._classes = ('__background__', # always index 0
+                         'person', 'people', 'person?') #govind: So, num_classes = 4 
+        
         self._classes = ('__background__', # always index 0
                          'aeroplane', 'bicycle', 'bird', 'boat',
                          'bottle', 'bus', 'car', 'cat', 'chair',
                          'cow', 'diningtable', 'dog', 'horse',
                          'motorbike', 'person', 'pottedplant',
-                         'sheep', 'sofa', 'train', 'tvmonitor')
-        #govind: Who is setting self.num_classes ?
+                         'sheep', 'sofa', 'train', 'tvmonitor')        
+        
+        #govind: num_classes is set based on the number of classes in _classes tuple
         self._class_to_ind = dict(zip(self.classes, xrange(self.num_classes)))
         self._image_ext = '.jpg'
-        #govind: image index is <image_number>. Images are stored as <image_number.jpg>
-        # So I'm guessing, a class instance of pascal_voc has all the image_nubers 
-        # pertaining to a specific _image_set
-        # Hence we'll be having three separate instances for "train", "test" or "val"
+        #govind: self._image_index is a list of all image names for current _image_set
         self._image_index = self._load_image_set_index()
+        
         # Default to roidb handler
         #govind: So this handler must be overwritten in faster-rcnn since we don't use selective search there?
         self._roidb_handler = self.selective_search_roidb
@@ -58,7 +62,7 @@ class pascal_voc(imdb):
                        'min_size'    : 2}
 
         assert os.path.exists(self._devkit_path), \
-                'VOCdevkit path does not exist: {}'.format(self._devkit_path)
+                'Caltech devkit path does not exist: {}'.format(self._devkit_path)
         assert os.path.exists(self._data_path), \
                 'Path does not exist: {}'.format(self._data_path)
 
@@ -73,33 +77,35 @@ class pascal_voc(imdb):
         """
         Construct an image path from the image's "index" identifier.
         """
-        image_path = os.path.join(self._data_path, 'JPEGImages',
+        image_path = os.path.join(self._data_path, 'images',
                                   index + self._image_ext)
         assert os.path.exists(image_path), \
                 'Path does not exist: {}'.format(image_path)
         return image_path
 
-    #govind: So this function create an image_index object which has list of 
+    #govind: This function create an image_index object which has list of 
     #all images for that particular _image_set
+    #govind: This should return a string in the "set00V000_1022.jpg" format
     def _load_image_set_index(self):
         """
         Load the indexes listed in this dataset's image set file.
         """
         # Example path to image set file:
         # self._devkit_path + /VOCdevkit2007/VOC2007/ImageSets/Main/val.txt
-        image_set_file = os.path.join(self._data_path, 'ImageSets', 'Main',
+        image_set_file = os.path.join(self._data_path, 'ImageSets',
                                       self._image_set + '.txt')
         assert os.path.exists(image_set_file), \
                 'Path does not exist: {}'.format(image_set_file)
         with open(image_set_file) as f:
             image_index = [x.strip() for x in f.readlines()]
+        #govind: Returns a list of all image names
         return image_index
 
     def _get_default_path(self):
         """
         Return the default path where PASCAL VOC is expected to be installed.
         """
-        return os.path.join(cfg.DATA_DIR, 'VOCdevkit' + self._year)
+        return os.path.join(cfg.DATA_DIR, 'caltech')
 
     def gt_roidb(self):
         """
@@ -107,7 +113,9 @@ class pascal_voc(imdb):
 
         This function loads/saves from/to a cache file to speed up future calls.
         """
-        assert 0
+        #govind: know when annotations part is getting executed
+        assert 0        
+        
         # govind: If the file is present then the training is printing this line 4 times
         # This is all the ground-truth annotations that are extracted from VOC/Annotations directory
         # one-time and then stored. This is done to skip processing of VOC/Annotations
@@ -119,13 +127,16 @@ class pascal_voc(imdb):
             print '{} gt roidb loaded from {}'.format(self.name, cache_file)
             return roidb
 
+        caltech_parsed_data = parse_caltech_annotations(self._image_set,
+            os.path.join(self._data_path, 'Annotations'))
+        
         #govind: this is reading the annotations from VOC/Annotations 
         # directory and writing them in a data/cache directory.
         # gt_roidb is a list of dictionaries. Nth element of this list 
         # is a corresponding dictionary for Nth image (which is usally
         # different from N.jpg)
-        gt_roidb = [self._load_pascal_annotation(index)
-                    for index in self.image_index]
+        gt_roidb = [self._load_caltech_annotation(caltech_parsed_data, i)
+                    for i in xrange(len(self.image_index))]
         with open(cache_file, 'wb') as fid:
             cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
         print 'wrote gt roidb to {}'.format(cache_file)
@@ -135,6 +146,7 @@ class pascal_voc(imdb):
     #govind: This alt-opt training log doesn't print the 
     # 'wrote ss roidb to' line. Hence this function is never getting called.
     def selective_search_roidb(self):
+        assert 0 #govind: this function might need be modified to Caltech
         """
         Return the database of selective search regions of interest.
         Ground-truth ROIs are also included.
@@ -195,6 +207,7 @@ class pascal_voc(imdb):
     #govind: I havent verified it, but I believe this function might not
     # be getting called since it involves selective_search
     def _load_selective_search_roidb(self, gt_roidb):
+        assert 0 #govind: this function might need be modified to Caltech
         filename = os.path.abspath(os.path.join(cfg.DATA_DIR,
                                                 'selective_search_data',
                                                 self.name + '.mat'))
@@ -214,25 +227,32 @@ class pascal_voc(imdb):
         return self.create_roidb_from_box_list(box_list, gt_roidb)
 
     #govind: The VOC2007/Annotations directory contains annotations for all
-    # the samples. This function creates an object of only the images which 
-    # are specified in the <index> as formal parameter.
-    # The returned value is stored as <roidb>
-    def _load_pascal_annotation(self, index):
+    # the samples. 
+    # govind: the parameter <index> is the Image file name (excluding extension and path)
+    # govind: Function returns a dictionary corresponding to Annotations of input <image>
+    def _load_caltech_annotation(self, caltech_parsed_data, idx_image):
         """
         Load image and bounding boxes info from XML file in the PASCAL VOC
         format.
         """
-        filename = os.path.join(self._data_path, 'Annotations', index + '.xml')
-        tree = ET.parse(filename)
-        objs = tree.findall('object')
-        if not self.config['use_diff']:
-            # Exclude the samples labeled as difficult
-            non_diff_objs = [
-                obj for obj in objs if int(obj.find('difficult').text) == 0]
-            # if len(non_diff_objs) != len(objs):
-            #     print 'Removed {} difficult objects'.format(
-            #         len(objs) - len(non_diff_objs))
-            objs = non_diff_objs
+        #govind: know when annotations part is getting executed
+        assert 0
+        
+        #filename = os.path.join(self._data_path, 'Annotations', idx_image + '.xml')
+        #tree = ET.parse(filename)
+        #objs = tree.findall('object')
+        #if not self.config['use_diff']:
+        #    # Exclude the samples labeled as difficult
+        #    non_diff_objs = [
+        #        obj for obj in objs if int(obj.find('difficult').text) == 0]
+        #    # if len(non_diff_objs) != len(objs):
+        #    #     print 'Removed {} difficult objects'.format(
+        #    #         len(objs) - len(non_diff_objs))
+        #    objs = non_diff_objs
+        
+        objs = caltech_parsed_data[idx_image]
+        
+        #govind: num_objs is the number of objects in the current image
         num_objs = len(objs)
 
         boxes = np.zeros((num_objs, 4), dtype=np.uint16)
@@ -242,29 +262,34 @@ class pascal_voc(imdb):
         seg_areas = np.zeros((num_objs), dtype=np.float32)
 
         # Load object bounding boxes into a data frame.
-        # govind: Loop over all the obects in the image
+        #govind: obj is a dictionary. Containing 'lbl' and 'pol'
+        # keys. 
         for ix, obj in enumerate(objs):
             bbox = obj.find('bndbox')
             # Make pixel indexes 0-based
-            x1 = float(bbox.find('xmin').text) - 1
-            y1 = float(bbox.find('ymin').text) - 1
-            x2 = float(bbox.find('xmax').text) - 1
-            y2 = float(bbox.find('ymax').text) - 1
-            cls = self._class_to_ind[obj.find('name').text.lower().strip()]
+            #x1 = float(bbox.find('xmin').text) - 1
+            #y1 = float(bbox.find('ymin').text) - 1
+            #x2 = float(bbox.find('xmax').text) - 1
+            #y2 = float(bbox.find('ymax').text) - 1
+            #cls = self._class_to_ind[obj.find('name').text.lower().strip()]
+            x1 = obj['lbl'][0]
+            y1 = obj['lbl'][1]
+            x2 = x1 + obj['lbl'][2]
+            y2 = y1 + obj['lbl'][3]
+            cls = obj['lbl']
+
             boxes[ix, :] = [x1, y1, x2, y2]
             gt_classes[ix] = cls
-            #govind: overlap for that particular self-class is set 1
             overlaps[ix, cls] = 1.0
             seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        #govind: Converting the overlap matrix to CSR format
         overlaps = scipy.sparse.csr_matrix(overlaps)
         
         #govind: So the <roidb> is dictionary.
         #I believe that we're not using the values seg_areas pesent in this dictionary
         #maybe legacy-code
         # gt_classes is an array of size <num_objs in the image>
-        # contains name of one of 20(or 21) classes
+        # contains name of 
         return {'boxes' : boxes,
                 'gt_classes': gt_classes,
                 'gt_overlaps' : overlaps,
@@ -279,16 +304,14 @@ class pascal_voc(imdb):
 
     #govind: The results of testing:
     #The file is stored as VOCdevkit/results/VOC2007/Main/<comp_id>_det_test_<class_name>.txt
-    def _get_voc_results_file_template(self):
-        # VOCdevkit/results/VOC2007/Main/<comp_id>_det_test_aeroplane.txt
+    def _get_caltech_results_file_template(self):
+        results_dir = path = os.path.join(
+            self._devkit_path, 'results');
+        if not os.path.isdir(results_dir):
+            os.mkdir(results_dir)
+        # caltech/results/<_get_comp_id>_det_test_aeroplane.txt
         filename = self._get_comp_id() + '_det_' + self._image_set + '_{:s}.txt'
-        path = os.path.join(
-            self._devkit_path,
-            'results',
-            'VOC' + self._year,
-            'Main',
-            filename)
-        return path
+        return os.path.join(results_dir, filename)
 
     #govind:     
     # Every class has a file associated with it. The cotents are
@@ -297,12 +320,12 @@ class pascal_voc(imdb):
     # 000045 0.069 366.1 31.8 473.3 267.2
     # 000045 0.056 82.9 71.5 500.0 371.6
     # 000070 0.052 162.7 40.5 323.1 373.2
-    def _write_voc_results_file(self, all_boxes):
+    def _write_caltech_results_file(self, all_boxes):
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
-            print 'Writing {} VOC results file'.format(cls)
-            filename = self._get_voc_results_file_template().format(cls)
+            print 'Writing {} caltech results file'.format(cls)
+            filename = self._get_caltech_results_file_template().format(cls)
             with open(filename, 'wt') as f:
                 for im_ind, index in enumerate(self.image_index):
                     dets = all_boxes[cls_ind][im_ind]
@@ -315,36 +338,33 @@ class pascal_voc(imdb):
                                        dets[k, 0] + 1, dets[k, 1] + 1,
                                        dets[k, 2] + 1, dets[k, 3] + 1))
 
-    #govind: This function is responsible for printing the summary at the end of
-    # faster_rcnn_alt_opt operation (maybe after testing too). 
+    #govind: This function is responsible for evaluating the 
+    # performance of network by comparing the 
+    # It is executed at the end of testing and is called by 
+    # lib/fast_rcnn/test_net()
     def _do_python_eval(self, output_dir = 'output'):
         annopath = os.path.join(
             self._devkit_path,
-            'VOC' + self._year,
-            'Annotations',
-            '{:s}.xml')
-        imagesetfile = os.path.join(
-            self._devkit_path,
-            'VOC' + self._year,
-            'ImageSets',
-            'Main',
-            self._image_set + '.txt')
+            'data',
+            'Annotations')
+        imagesetfile = os.path.join(self._data_path, 'ImageSets',
+                                      self._image_set + '.txt')            
+            
         cachedir = os.path.join(self._devkit_path, 'annotations_cache')
         aps = []
-        # The PASCAL VOC metric changed in 2010
-        use_07_metric = True if int(self._year) < 2010 else False
-        print 'VOC07 metric? ' + ('Yes' if use_07_metric else 'No')
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)
+        #govind: Write Precision, Recall results of each class 
+        # into a separate .pkl file
         for i, cls in enumerate(self._classes):
-            if cls == '__background__':
+            #govind: Ignore all other classes, including '__background__'
+            if cls != 'person':
                 continue
-            filename = self._get_voc_results_file_template().format(cls)
+            filename = self._get_caltech_results_file_template().format(cls)
             #govind: It's calling a function which will give Precision, Recall and 
             # average precision if we pass it the _results_file
-            rec, prec, ap = voc_eval(
-                filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5,
-                use_07_metric=use_07_metric)
+            rec, prec, ap = caltech_eval(
+                filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5, use_07_metric=True)
             aps += [ap]
             print('AP for {} = {:.4f}'.format(cls, ap))
             with open(os.path.join(output_dir, cls + '_pr.pkl'), 'w') as f:
@@ -383,15 +403,17 @@ class pascal_voc(imdb):
         status = subprocess.call(cmd, shell=True)
 
     def evaluate_detections(self, all_boxes, output_dir):
-        self._write_voc_results_file(all_boxes)
+        self._write_caltech_results_file(all_boxes)
         self._do_python_eval(output_dir)
         if self.config['matlab_eval']:
+            assert(0) #govind: code not modified for caltech
             self._do_matlab_eval(output_dir)
         if self.config['cleanup']:
+            #govind: Remove the temp result files 
             for cls in self._classes:
                 if cls == '__background__':
                     continue
-                filename = self._get_voc_results_file_template().format(cls)
+                filename = self._get_caltech_results_file_template().format(cls)
                 os.remove(filename)
 
     def competition_mode(self, on):
@@ -403,6 +425,9 @@ class pascal_voc(imdb):
             self.config['cleanup'] = True
 
 if __name__ == '__main__':
+    #govind: know when this part is getting executed
+    assert 0
+
     from datasets.pascal_voc import pascal_voc
     d = pascal_voc('trainval', '2007')
     res = d.roidb
