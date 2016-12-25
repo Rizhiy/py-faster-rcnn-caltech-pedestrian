@@ -20,7 +20,10 @@ def parse_caltech_annotations(imagenames, ann_dir):
     recs = {}
     all_obj = 0
     data = defaultdict(dict)
+    image_wd = 640
+    image_ht = 480
     
+    # Parse all the annotations and store
     for dname in sorted(glob.glob(ann_dir+'/set*')):
         set_name = os.path.basename(dname)
         data[set_name] = defaultdict(dict)
@@ -48,6 +51,12 @@ def parse_caltech_annotations(imagenames, ann_dir):
                         id = int(id[0][0]) - 1  # MATLAB is 1-origin
                         keys = obj.dtype.names
                         pos = pos[0].tolist()
+                        # Clip the incorrect? bounding boxes
+                        # [xmin, ymin xmax, ymax]
+                        pos[0] = np.clip(pos[0], 0, image_wd)
+                        pos[1] = np.clip(pos[1], 0, image_ht)
+                        pos[2] = np.clip(pos[0]+pos[2], 0, image_wd)
+                        pos[3] = np.clip(pos[1]+pos[3], 0, image_ht)
                         datum = dict(zip(keys, [id, pos]))
                         obj_datum = dict()
                         obj_datum['name'] = str(objLbl[datum['id']])
@@ -57,9 +66,12 @@ def parse_caltech_annotations(imagenames, ann_dir):
                         obj_datum['pose'] = 'Unspecified'
                         obj_datum['truncated'] = 0
                         obj_datum['difficult'] = 0
-                        obj_datum['bbox'] = [pos[0], pos[1], pos[0]+pos[2], pos[1]+pos[3]]
+                        obj_datum['bbox'] = pos
                         objs.append(obj_datum)
                 data[set_name][video_name][frame_id] = objs
+                
+    # Out of all available annotations, just use those that are
+    # required (as listed in imagenames)
     for imagename in imagenames:
         image_set_name = imagename[0:5]
         image_vid_name = imagename[5:9]
@@ -68,8 +80,41 @@ def parse_caltech_annotations(imagenames, ann_dir):
             recs[imagename] = data[image_set_name][image_vid_name][image_id]
         else:
             print "Warning: No %s.jpg found in Annotations" %(imagename)
+           
+        #vis_annotations(imagename, recs[imagename])
     return recs
 
+def vis_annotations(imagename, dets):
+    """Draw detected bounding boxes."""
+    import cv2
+    import matplotlib.pyplot as plt
+    plt.switch_backend('agg')
+    im = cv2.imread(os.path.join('/media/disk2/govind/work/dataset/caltech/data/images',
+        imagename + '.jpg'))
+    inds = dets
+    if len(inds) == 0:
+        return
+    im = im[:, :, (2, 1, 0)]
+    fig, ax = plt.subplots(figsize=(12, 12))
+    ax.imshow(im, aspect='equal')
+    for obj in inds:
+        bbox = obj['bbox']
+        #print bbox
+        class_name = obj['name']
+        ax.add_patch(
+            plt.Rectangle((bbox[0], bbox[1]),
+                          bbox[2] - bbox[0],
+                          bbox[3] - bbox[1], fill=False,
+                          edgecolor='red', linewidth=3.5)
+            )
+        ax.text(bbox[0], bbox[1] - 2,
+                '{:s}'.format(class_name),
+                bbox=dict(facecolor='blue', alpha=0.5),
+                fontsize=14, color='white')
+    plt.axis('off')
+    plt.tight_layout()
+    plt.savefig(imagename + '_ann.jpg')
+    
 def caltech_ap(rec, prec, use_07_metric=False):
     """ ap = caltech_ap(rec, prec, [use_07_metric])
     Compute VOC AP given precision and recall.

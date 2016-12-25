@@ -16,7 +16,7 @@ import utils.cython_bbox
 import cPickle
 import subprocess
 import uuid
-from caltech_utils import caltech_eval
+from caltech_utils import caltech_eval, parse_caltech_annotations
 from fast_rcnn.config import cfg
 
 class caltech(imdb):
@@ -31,15 +31,16 @@ class caltech(imdb):
         self._devkit_path = self._get_default_path() if devkit_path is None \
                             else devkit_path
         self._data_path = os.path.join(self._devkit_path, 'data')
+        #govind: Ignoring the people class. So, num_classes = 2
         self._classes = ('__background__', # always index 0
-                         'person', 'people', 'person?') #govind: So, num_classes = 4 
+                         'person') 
         
-        self._classes = ('__background__', # always index 0
-                         'aeroplane', 'bicycle', 'bird', 'boat',
-                         'bottle', 'bus', 'car', 'cat', 'chair',
-                         'cow', 'diningtable', 'dog', 'horse',
-                         'motorbike', 'person', 'pottedplant',
-                         'sheep', 'sofa', 'train', 'tvmonitor')        
+        #self._classes = ('__background__', # always index 0
+        #                 'aeroplane', 'bicycle', 'bird', 'boat',
+        #                 'bottle', 'bus', 'car', 'cat', 'chair',
+        #                 'cow', 'diningtable', 'dog', 'horse',
+        #                 'motorbike', 'person', 'pottedplant',
+        #                 'sheep', 'sofa', 'train', 'tvmonitor')        
         
         #govind: num_classes is set based on the number of classes in _classes tuple
         self._class_to_ind = dict(zip(self.classes, xrange(self.num_classes)))
@@ -113,35 +114,41 @@ class caltech(imdb):
 
         This function loads/saves from/to a cache file to speed up future calls.
         """
-        #govind: know when annotations part is getting executed
-        assert 0        
-        
-        # govind: If the file is present then the training is printing this line 4 times
+        # govind: If the file is present then the alt-opt training is printing this line 4 times
         # This is all the ground-truth annotations that are extracted from VOC/Annotations directory
         # one-time and then stored. This is done to skip processing of VOC/Annotations
         # for future calls (as the function header says)
         cache_file = os.path.join(self.cache_path, self.name + '_gt_roidb.pkl')
-        if os.path.exists(cache_file):
+        # govind: Forcefully read annotations as of now
+        if 0:#os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
             print '{} gt roidb loaded from {}'.format(self.name, cache_file)
             return roidb
-
-        caltech_parsed_data = parse_caltech_annotations(self._image_set,
-            os.path.join(self._data_path, 'Annotations'))
-        
-        #govind: this is reading the annotations from VOC/Annotations 
-        # directory and writing them in a data/cache directory.
-        # gt_roidb is a list of dictionaries. Nth element of this list 
-        # is a corresponding dictionary for Nth image (which is usally
-        # different from N.jpg)
-        gt_roidb = [self._load_caltech_annotation(caltech_parsed_data, i)
-                    for i in xrange(len(self.image_index))]
-        with open(cache_file, 'wb') as fid:
-            cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
-        print 'wrote gt roidb to {}'.format(cache_file)
-
-        return gt_roidb
+        else:
+            imagesetfile = os.path.join(self._data_path, 'ImageSets',
+                                          self._image_set + '.txt')
+                                          
+            # read list of images
+            with open(imagesetfile, 'r') as f:
+                lines = f.readlines()
+            imagenames = [x.strip() for x in lines]                                      
+                                          
+            caltech_parsed_data = parse_caltech_annotations(imagenames,
+                os.path.join(self._data_path, 'Annotations'))              
+                
+            #govind: this is reading the annotations from VOC/Annotations 
+            # directory and writing them in data/cache directory.
+            # gt_roidb is a list of dictionaries. Nth element of this list 
+            # is a corresponding dictionary for Nth image (which is usally
+            # different from N.jpg)
+            gt_roidb = [self._load_caltech_annotation(caltech_parsed_data, i)
+                        for i in self.image_index]
+                    
+            with open(cache_file, 'wb') as fid:
+                cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
+            print 'wrote gt roidb to {}'.format(cache_file)
+            return gt_roidb
 
     #govind: This alt-opt training log doesn't print the 
     # 'wrote ss roidb to' line. Hence this function is never getting called.
@@ -230,31 +237,17 @@ class caltech(imdb):
     # the samples. 
     # govind: the parameter <index> is the Image file name (excluding extension and path)
     # govind: Function returns a dictionary corresponding to Annotations of input <image>
+    # idx_image is an image name
     def _load_caltech_annotation(self, caltech_parsed_data, idx_image):
         """
         Load image and bounding boxes info from XML file in the PASCAL VOC
         format.
         """
-        #govind: know when annotations part is getting executed
-        assert 0
-        
-        #filename = os.path.join(self._data_path, 'Annotations', idx_image + '.xml')
-        #tree = ET.parse(filename)
-        #objs = tree.findall('object')
-        #if not self.config['use_diff']:
-        #    # Exclude the samples labeled as difficult
-        #    non_diff_objs = [
-        #        obj for obj in objs if int(obj.find('difficult').text) == 0]
-        #    # if len(non_diff_objs) != len(objs):
-        #    #     print 'Removed {} difficult objects'.format(
-        #    #         len(objs) - len(non_diff_objs))
-        #    objs = non_diff_objs
-        
+        # objs is a list of dictionaries. Each dictionary represents
+        # and object
         objs = caltech_parsed_data[idx_image]
-        
         #govind: num_objs is the number of objects in the current image
         num_objs = len(objs)
-
         boxes = np.zeros((num_objs, 4), dtype=np.uint16)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
         overlaps = np.zeros((num_objs, self.num_classes), dtype=np.float32)
@@ -265,24 +258,17 @@ class caltech(imdb):
         #govind: obj is a dictionary. Containing 'lbl' and 'pol'
         # keys. 
         for ix, obj in enumerate(objs):
-            bbox = obj.find('bndbox')
-            # Make pixel indexes 0-based
-            #x1 = float(bbox.find('xmin').text) - 1
-            #y1 = float(bbox.find('ymin').text) - 1
-            #x2 = float(bbox.find('xmax').text) - 1
-            #y2 = float(bbox.find('ymax').text) - 1
-            #cls = self._class_to_ind[obj.find('name').text.lower().strip()]
-            x1 = obj['lbl'][0]
-            y1 = obj['lbl'][1]
-            x2 = x1 + obj['lbl'][2]
-            y2 = y1 + obj['lbl'][3]
-            cls = obj['lbl']
-
-            boxes[ix, :] = [x1, y1, x2, y2]
+            x1 = obj['bbox'][0]
+            y1 = obj['bbox'][1]
+            x2 = obj['bbox'][2]
+            y2 = obj['bbox'][3]
+            cls = self._class_to_ind[obj['name']]
+            boxes[ix, :] = obj['bbox']
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0
             seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
-
+            
+        #govind: Converting the overlap matrix to CSR format
         overlaps = scipy.sparse.csr_matrix(overlaps)
         
         #govind: So the <roidb> is dictionary.
@@ -291,7 +277,7 @@ class caltech(imdb):
         # gt_classes is an array of size <num_objs in the image>
         # contains name of 
         return {'boxes' : boxes,
-                'gt_classes': gt_classes,
+                'gt_classes': gt_classes, #gt_classes is class index (integer). _background_ is 0
                 'gt_overlaps' : overlaps,
                 'flipped' : False,
                 'seg_areas' : seg_areas}
