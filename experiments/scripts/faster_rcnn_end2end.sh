@@ -13,36 +13,18 @@ set -e
 export PYTHONUNBUFFERED="True"
 
 GPU_ID=$1
-NET=$2
+NET=VGG16       #fixed for caltech dataset
 NET_lc=${NET,,}
-DATASET=$3
 
 array=( $@ )
 len=${#array[@]}
 EXTRA_ARGS=${array[@]:3:$len}
 EXTRA_ARGS_SLUG=${EXTRA_ARGS// /_}
 
-case $DATASET in
-  pascal_voc)
-    TRAIN_IMDB="voc_2007_trainval"
-    TEST_IMDB="voc_2007_test"
-    PT_DIR="pascal_voc"
-    ITERS=70000
-    ;;
-  coco)
-    # This is a very long and slow training schedule
-    # You can probably use fewer iterations and reduce the
-    # time to the LR drop (set in the solver to 350,000 iterations).
-    TRAIN_IMDB="coco_2014_train"
-    TEST_IMDB="coco_2014_minival"
-    PT_DIR="coco"
-    ITERS=490000
-    ;;
-  *)
-    echo "No dataset given"
-    exit
-    ;;
-esac
+TRAIN_IMDB="caltech_train_1x"
+TEST_IMDB="caltech_test_1x"
+PT_DIR="caltech"
+ITERS=1000
 
 LOG="experiments/logs/faster_rcnn_end2end_${NET}_${EXTRA_ARGS_SLUG}.txt.`date +'%Y-%m-%d_%H-%M-%S'`"
 exec &> >(tee -a "$LOG")

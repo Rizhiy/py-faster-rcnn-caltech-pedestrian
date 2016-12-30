@@ -67,26 +67,20 @@ class caltech(imdb):
         assert os.path.exists(self._data_path), \
                 'Path does not exist: {}'.format(self._data_path)
 
-    def image_path_at(self, i):
+    def image_path_at(self, i): # i is a number
         """
         Return the absolute path to image i in the image sequence.
         """
-        #govind: So do I need to create an image-index file?
-        return self.image_path_from_index(self._image_index[i])
-
-    def image_path_from_index(self, index):
-        """
-        Construct an image path from the image's "index" identifier.
-        """
-        image_path = os.path.join(self._data_path, 'images',
-                                  index + self._image_ext)
+        image_path = os.path.join(self._data_path, 'JPEGImages',
+                                  self._image_index[i] + self._image_ext)
         assert os.path.exists(image_path), \
                 'Path does not exist: {}'.format(image_path)
         return image_path
 
     #govind: This function create an image_index object which has list of 
     #all images for that particular _image_set
-    #govind: This should return a string in the "set00V000_1022.jpg" format
+    #govind: This returns a a list of all image identifiers.
+    # e.g. for image 1022.jpg in set01, V003 it stores "set01/V003/1022"
     def _load_image_set_index(self):
         """
         Load the indexes listed in this dataset's image set file.
@@ -114,12 +108,11 @@ class caltech(imdb):
 
         This function loads/saves from/to a cache file to speed up future calls.
         """
-        # govind: If the file is present then the alt-opt training is printing this line 4 times
         # This is all the ground-truth annotations that are extracted from VOC/Annotations directory
         # one-time and then stored. This is done to skip processing of VOC/Annotations
         # for future calls (as the function header says)
         cache_file = os.path.join(self.cache_path, self.name + '_gt_roidb.pkl')
-        # govind: Forcefully read annotations as of now
+        # govind: Forcefully re-read annotations as of now
         if 0:#os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
@@ -135,7 +128,7 @@ class caltech(imdb):
             imagenames = [x.strip() for x in lines]                                      
                                           
             caltech_parsed_data = parse_caltech_annotations(imagenames,
-                os.path.join(self._data_path, 'Annotations'))              
+                os.path.join(self._data_path, 'annotations'))              
                 
             #govind: this is reading the annotations from VOC/Annotations 
             # directory and writing them in data/cache directory.
@@ -153,7 +146,7 @@ class caltech(imdb):
     #govind: This alt-opt training log doesn't print the 
     # 'wrote ss roidb to' line. Hence this function is never getting called.
     def selective_search_roidb(self):
-        assert 0 #govind: this function might need be modified to Caltech
+        assert 0 #govind: this function might need be modified for Caltech
         """
         Return the database of selective search regions of interest.
         Ground-truth ROIs are also included.
@@ -329,10 +322,7 @@ class caltech(imdb):
     # It is executed at the end of testing and is called by 
     # lib/fast_rcnn/test_net()
     def _do_python_eval(self, output_dir = 'output'):
-        annopath = os.path.join(
-            self._devkit_path,
-            'data',
-            'Annotations')
+        annopath = os.path.join(self._data_path, 'annotations')
         imagesetfile = os.path.join(self._data_path, 'ImageSets',
                                       self._image_set + '.txt')            
             

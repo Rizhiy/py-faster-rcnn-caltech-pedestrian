@@ -12,8 +12,8 @@ import xml.etree.ElementTree as ET
 import cPickle
 import numpy as np
 
-def parse_caltech_annotations(imagenames, ann_dir):
-    #recs is a dictionary with keys as imagename.
+def parse_caltech_annotations(image_identifiers, ann_dir):
+    #recs is a dictionary with keys as image_identifier.
     #value is a list of dictionaries where each dictionary belongs
     #to an object
     #Inside each dictionary the keys are 'name', 'bbox' etc
@@ -71,26 +71,26 @@ def parse_caltech_annotations(imagenames, ann_dir):
                 data[set_name][video_name][frame_id] = objs
                 
     # Out of all available annotations, just use those that are
-    # required (as listed in imagenames)
-    for imagename in imagenames:
-        image_set_name = imagename[0:5]
-        image_vid_name = imagename[5:9]
-        image_id       = int(imagename[10:])
-        if image_id in data[image_set_name][image_vid_name]:
-            recs[imagename] = data[image_set_name][image_vid_name][image_id]
+    # required (as listed in image_identifiers)
+    for image_identifier in image_identifiers:
+        image_set_name = image_identifier[0:5]
+        image_seq_name = image_identifier[6:10]
+        image_id       = int(image_identifier[11:])
+        if image_id in data[image_set_name][image_seq_name]:
+            recs[image_identifier] = data[image_set_name][image_seq_name][image_id]
         else:
-            print "Warning: No %s.jpg found in Annotations" %(imagename)
+            print "Warning: No %s.jpg found in annotations" %(image_identifier)
            
-        #vis_annotations(imagename, recs[imagename])
+        #vis_annotations(image_identifier, recs[image_identifier])
     return recs
 
-def vis_annotations(imagename, dets):
+def vis_annotations(image_identifier, dets):
     """Draw detected bounding boxes."""
     import cv2
     import matplotlib.pyplot as plt
     plt.switch_backend('agg')
-    im = cv2.imread(os.path.join('/media/disk2/govind/work/dataset/caltech/data/images',
-        imagename + '.jpg'))
+    im = cv2.imread(os.path.join('/media/disk2/govind/work/dataset/caltech/data/JPEGImages',
+        image_identifier + '.jpg'))
     inds = dets
     if len(inds) == 0:
         return
@@ -113,7 +113,7 @@ def vis_annotations(imagename, dets):
                 fontsize=14, color='white')
     plt.axis('off')
     plt.tight_layout()
-    plt.savefig(imagename + '_ann.jpg')
+    plt.savefig(image_identifier + '_ann.jpg')
     
 def caltech_ap(rec, prec, use_07_metric=False):
     """ ap = caltech_ap(rec, prec, [use_07_metric])
@@ -167,7 +167,7 @@ def caltech_eval(detpath,
     detpath: Path to detections
         detpath.format(classname) should produce the detection results file.
     annopath: Path to annotations
-        annopath.format(imagename) should be the xml annotations file.
+        annopath.format(image_identifier) should be the xml annotations file.
     imagesetfile: Text file containing the list of images, one image per line.
     classname: Category name (duh)
     cachedir: Directory for caching the annotations
@@ -176,7 +176,7 @@ def caltech_eval(detpath,
         (default False)
     """
     # assumes detections are in detpath.format(classname)
-    # assumes annotations are in annopath.format(imagename)
+    # assumes annotations are in annopath.format(image_identifier)
     # assumes imagesetfile is a text file with each line an image name
     # cachedir caches the annotations in a pickle file
 
@@ -187,7 +187,7 @@ def caltech_eval(detpath,
     # read list of images
     with open(imagesetfile, 'r') as f:
         lines = f.readlines()
-    imagenames = [x.strip() for x in lines]
+    image_identifiers = [x.strip() for x in lines]
 
     #govind: If testing is performed after training, then 
     # the ground-truth annots would already be present
@@ -195,8 +195,8 @@ def caltech_eval(detpath,
     #govind: unconditionally parse annotations
     if 1:#not os.path.isfile(cachefile):
         # load annots
-        #govind: recs is a dictionary with <imagename> as keys
-        recs = parse_caltech_annotations(imagenames, annopath)
+        #govind: recs is a dictionary with <image_identifier> as keys
+        recs = parse_caltech_annotations(image_identifiers, annopath)
         # save
         print 'Saving cached annotations to {:s}'.format(cachefile)
         with open(cachefile, 'w') as f:
@@ -211,18 +211,18 @@ def caltech_eval(detpath,
     # dictionary class_recs which is specific to this class
     class_recs = {}
     npos = 0
-    for imagename in imagenames:
-        R = [obj for obj in recs[imagename] if obj['name'] == classname]
+    for image_identifier in image_identifiers:
+        R = [obj for obj in recs[image_identifier] if obj['name'] == classname]
         bbox = np.array([x['bbox'] for x in R])
         difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
         det = [False] * len(R)
         npos = npos + sum(~difficult)
-        class_recs[imagename] = {'bbox': bbox,
+        class_recs[image_identifier] = {'bbox': bbox,
                                  'difficult': difficult,
                                  'det': det}
         #There might not be any objects in the picture
-        #if not recs[imagename]: #Check if list is empty
-        #    print 'Warn: No labels present for: ', imagename
+        #if not recs[image_identifier]: #Check if list is empty
+        #    print 'Warn: No labels present for: ', image_identifier
 
     # read dets
     detfile = detpath.format(classname)
