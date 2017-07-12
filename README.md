@@ -11,6 +11,7 @@ NOTE: See the original Readme for py-faster-rcnn [here](https://github.com/rbgir
 	```
 	
 2. Download the video sequences and annotations
+
 	```Shell
 	wget https://www.vision.caltech.edu/Image_Datasets/CaltechPedestrians/datasets/USA/set00.tar
 	wget https://www.vision.caltech.edu/Image_Datasets/CaltechPedestrians/datasets/USA/set01.tar
