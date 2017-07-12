@@ -128,20 +128,7 @@ ZF was trained at MSRA.
 
 ### Usage
 
-**[Alt-opt method not supported currently. See end2end method below]**
-
-To train and test a Faster R-CNN detector using the **alternating optimization** algorithm from our NIPS 2015 paper, use `experiments/scripts/faster_rcnn_alt_opt.sh`.
-Output is written underneath `$FRCN_ROOT/output`.
-
-```Shell
-cd $FRCN_ROOT
-./experiments/scripts/faster_rcnn_alt_opt.sh [GPU_ID] [--set ...]
-# GPU_ID is the GPU you want to train on
-# --set ... allows you to specify fast_rcnn.config options, e.g.
-# --set EXP_DIR seed_rng1701 RNG_SEED 1701
-```
-
-("alt opt" refers to the alternating optimization training algorithm described in the NIPS paper.)
+**Alt-opt method not supported, using end2end**
 
 To train and test a Faster R-CNN detector using the **approximate joint training** method, use `experiments/scripts/faster_rcnn_end2end.sh`.
 Output is written underneath `$FRCN_ROOT/output`.
