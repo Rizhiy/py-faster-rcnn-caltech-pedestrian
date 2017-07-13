@@ -7,31 +7,31 @@ import json
 from scipy.io import loadmat
 from collections import defaultdict
 
-
 import xml.etree.ElementTree as ET
 import cPickle
 import numpy as np
 
+
 def parse_caltech_annotations(image_identifiers, ann_dir):
-    #recs is a dictionary with keys as image_identifier.
-    #value is a list of dictionaries where each dictionary belongs
-    #to an object
-    #Inside each dictionary the keys are 'name', 'bbox' etc
+    # recs is a dictionary with keys as image_identifier.
+    # value is a list of dictionaries where each dictionary belongs
+    # to an object
+    # Inside each dictionary the keys are 'name', 'bbox' etc
     recs = {}
     all_obj = 0
     data = defaultdict(dict)
     image_wd = 640
     image_ht = 480
-    
+
     # Parse all the annotations and store
-    for dname in sorted(glob.glob(ann_dir+'/set*')):
+    for dname in sorted(glob.glob(ann_dir + '/set*')):
         set_name = os.path.basename(dname)
         data[set_name] = defaultdict(dict)
         for anno_fn in sorted(glob.glob('{}/*.vbb'.format(dname))):
             vbb = loadmat(anno_fn)
             nFrame = int(vbb['A'][0][0][0][0][0])
             objLists = vbb['A'][0][0][1][0]
-            #govind: Is it maximum number of objects in that vbb file?
+            # govind: Is it maximum number of objects in that vbb file?
             maxObj = int(vbb['A'][0][0][2][0][0])
             objInit = vbb['A'][0][0][3][0]
             objLbl = [str(v[0]) for v in vbb['A'][0][0][4][0]]
@@ -43,7 +43,7 @@ def parse_caltech_annotations(image_identifiers, ann_dir):
             logLen = int(vbb['A'][0][0][10][0][0])
 
             video_name = os.path.splitext(os.path.basename(anno_fn))[0]
-            #govind: One iteration of this loop processes one frame
+            # govind: One iteration of this loop processes one frame
             for frame_id, obj in enumerate(objLists):
                 objs = []
                 if len(obj) > 0:
@@ -55,12 +55,12 @@ def parse_caltech_annotations(image_identifiers, ann_dir):
                         # [xmin, ymin xmax, ymax]
                         pos[0] = np.clip(pos[0], 0, image_wd)
                         pos[1] = np.clip(pos[1], 0, image_ht)
-                        pos[2] = np.clip(pos[0]+pos[2], 0, image_wd)
-                        pos[3] = np.clip(pos[1]+pos[3], 0, image_ht)
+                        pos[2] = np.clip(pos[0] + pos[2], 0, image_wd)
+                        pos[3] = np.clip(pos[1] + pos[3], 0, image_ht)
                         datum = dict(zip(keys, [id, pos]))
                         obj_datum = dict()
                         obj_datum['name'] = str(objLbl[datum['id']])
-                        #govind: Ignore 'people', 'person?' and 'person-fa' labels
+                        # govind: Ignore 'people', 'person?' and 'person-fa' labels
                         if obj_datum['name'] != 'person':
                             continue
                         obj_datum['pose'] = 'Unspecified'
@@ -69,20 +69,21 @@ def parse_caltech_annotations(image_identifiers, ann_dir):
                         obj_datum['bbox'] = pos
                         objs.append(obj_datum)
                 data[set_name][video_name][frame_id] = objs
-                
+
     # Out of all available annotations, just use those that are
     # required (as listed in image_identifiers)
     for image_identifier in image_identifiers:
         image_set_name = image_identifier[0:5]
         image_seq_name = image_identifier[6:10]
-        image_id       = int(image_identifier[11:])
+        image_id = int(image_identifier[11:])
         if image_id in data[image_set_name][image_seq_name]:
             recs[image_identifier] = data[image_set_name][image_seq_name][image_id]
         else:
-            print "Warning: No %s.jpg found in annotations" %(image_identifier)
-           
-        #vis_annotations(image_identifier, recs[image_identifier])
+            print "Warning: No %s.jpg found in annotations" % (image_identifier)
+
+            # vis_annotations(image_identifier, recs[image_identifier])
     return recs
+
 
 def vis_annotations(image_identifier, dets):
     """Draw detected bounding boxes."""
@@ -90,7 +91,7 @@ def vis_annotations(image_identifier, dets):
     import matplotlib.pyplot as plt
     plt.switch_backend('agg')
     im = cv2.imread(os.path.join('/media/disk2/govind/work/dataset/caltech/data/JPEGImages',
-        image_identifier + '.jpg'))
+                                 image_identifier + '.jpg'))
     inds = dets
     if len(inds) == 0:
         return
@@ -99,14 +100,14 @@ def vis_annotations(image_identifier, dets):
     ax.imshow(im, aspect='equal')
     for obj in inds:
         bbox = obj['bbox']
-        #print bbox
+        # print bbox
         class_name = obj['name']
         ax.add_patch(
             plt.Rectangle((bbox[0], bbox[1]),
                           bbox[2] - bbox[0],
                           bbox[3] - bbox[1], fill=False,
                           edgecolor='red', linewidth=3.5)
-            )
+        )
         ax.text(bbox[0], bbox[1] - 2,
                 '{:s}'.format(class_name),
                 bbox=dict(facecolor='blue', alpha=0.5),
@@ -114,7 +115,8 @@ def vis_annotations(image_identifier, dets):
     plt.axis('off')
     plt.tight_layout()
     plt.savefig(image_identifier + '_ann.jpg')
-    
+
+
 def caltech_ap(rec, prec, use_07_metric=False):
     """ ap = caltech_ap(rec, prec, [use_07_metric])
     Compute VOC AP given precision and recall.
@@ -148,20 +150,15 @@ def caltech_ap(rec, prec, use_07_metric=False):
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
     return ap
 
-def caltech_eval(detpath,
-             annopath,
-             imagesetfile,
-             classname,
-             cachedir,
-             ovthresh=0.5,
-             use_07_metric=False):
-    """rec, prec, ap = voc_eval(detpath,
-                                annopath,
-                                imagesetfile,
-                                classname,
-                                [ovthresh],
-                                [use_07_metric])
 
+def caltech_eval(detpath,
+                 annopath,
+                 imagesetfile,
+                 classname,
+                 cachedir,
+                 ovthresh=0.5,
+                 use_07_metric=False):
+    """
     Top level function that does the PASCAL VOC evaluation.
 
     detpath: Path to detections
@@ -189,13 +186,13 @@ def caltech_eval(detpath,
         lines = f.readlines()
     image_identifiers = [x.strip() for x in lines]
 
-    #govind: If testing is performed after training, then 
+    # govind: If testing is performed after training, then
     # the ground-truth annots would already be present
     # as cachefile
-    #govind: unconditionally parse annotations
-    if 1:#not os.path.isfile(cachefile):
+    # govind: unconditionally parse annotations
+    if 1:  # not os.path.isfile(cachefile):
         # load annots
-        #govind: recs is a dictionary with <image_identifier> as keys
+        # govind: recs is a dictionary with <image_identifier> as keys
         recs = parse_caltech_annotations(image_identifiers, annopath)
         # save
         print 'Saving cached annotations to {:s}'.format(cachefile)
@@ -207,7 +204,7 @@ def caltech_eval(detpath,
             recs = cPickle.load(f)
 
     # extract gt objects for this class
-    #govind: recs is not class specific. Hence create another 
+    # govind: recs is not class specific. Hence create another
     # dictionary class_recs which is specific to this class
     class_recs = {}
     npos = 0
@@ -218,35 +215,36 @@ def caltech_eval(detpath,
         det = [False] * len(R)
         npos = npos + sum(~difficult)
         class_recs[image_identifier] = {'bbox': bbox,
-                                 'difficult': difficult,
-                                 'det': det}
-        #There might not be any objects in the picture
-        #if not recs[image_identifier]: #Check if list is empty
+                                        'difficult': difficult,
+                                        'det': det}
+        # There might not be any objects in the picture
+        # if not recs[image_identifier]: #Check if list is empty
         #    print 'Warn: No labels present for: ', image_identifier
 
     # read dets
     detfile = detpath.format(classname)
     with open(detfile, 'r') as f:
         lines = f.readlines()
-    
-    #govind: TODO: lines may be empty 
+
     splitlines = [x.strip().split(' ') for x in lines]
-    image_ids = [x[0] for x in splitlines] #Image name
+    image_ids = [x[0] for x in splitlines]  # Image name
     confidence = np.array([float(x[1]) for x in splitlines])
     BB = np.array([[float(z) for z in x[2:]] for x in splitlines])
 
     # sort by confidence
     sorted_ind = np.argsort(-confidence)
     sorted_scores = np.sort(-confidence)
-    BB = BB[sorted_ind, :]
+    if len(BB) != 0:  # check if array is empty
+        BB = BB[sorted_ind, :]
     image_ids = [image_ids[x] for x in sorted_ind]
 
+    # TODO: add miss rate
     # go down dets and mark TPs and FPs
     nd = len(image_ids)
     tp = np.zeros(nd)
     fp = np.zeros(nd)
     for d in range(nd):
-        #load all ground truths for this image
+        # load all ground truths for this image
         R = class_recs[image_ids[d]]
         bb = BB[d, :].astype(float)
         ovmax = -np.inf
@@ -292,4 +290,3 @@ def caltech_eval(detpath,
     ap = caltech_ap(rec, prec, use_07_metric)
 
     return rec, prec, ap
-    

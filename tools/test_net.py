@@ -18,6 +18,7 @@ import argparse
 import pprint
 import time, os, sys
 
+
 def parse_args():
     """
     Parse input arguments
@@ -25,6 +26,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Test a Fast R-CNN network')
     parser.add_argument('--gpu', dest='gpu_id', help='GPU id to use',
                         default=0, type=int)
+    parser.add_argument('--cpu', action='store_true', help='Whether to use cpu, overrides gpu')
+    parser.set_defaults(cpu=False)
     parser.add_argument('--def', dest='prototxt',
                         help='prototxt file defining the network',
                         default=None, type=str)
@@ -57,6 +60,7 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+
 if __name__ == '__main__':
     args = parse_args()
 
@@ -77,8 +81,11 @@ if __name__ == '__main__':
         print('Waiting for {} to exist...'.format(args.caffemodel))
         time.sleep(10)
 
-    caffe.set_mode_cpu()
-    caffe.set_device(args.gpu_id)
+    if args.cpu:
+        caffe.set_mode_cpu()
+    else:
+        caffe.set_mode_gpu()
+        caffe.set_device(args.gpu_id)
     net = caffe.Net(args.prototxt, args.caffemodel, caffe.TEST)
     net.name = os.path.splitext(os.path.basename(args.caffemodel))[0]
 

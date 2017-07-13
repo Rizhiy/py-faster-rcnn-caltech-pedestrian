@@ -29,7 +29,7 @@ echo Logging output to "$LOG"
 
 NET_FINAL=/home/rizhiy/pedestrian_detection/rcnn/py-faster-rcnn-caltech-pedestrian/data/faster_rcnn_models/VGG16_faster_rcnn_final.caffemodel
 
-time ./tools/test_net.py \
+time ./tools/test_net.py --cpu \
   --def models/${PT_DIR}/${NET}/faster_rcnn_end2end/test.prototxt \
   --net ${NET_FINAL} \
   --imdb ${TEST_IMDB} \
