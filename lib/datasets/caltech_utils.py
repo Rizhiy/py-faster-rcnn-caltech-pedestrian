@@ -79,7 +79,8 @@ def parse_caltech_annotations(image_identifiers, ann_dir):
         if image_id in data[image_set_name][image_seq_name]:
             recs[image_identifier] = data[image_set_name][image_seq_name][image_id]
         else:
-            print "Warning: No %s.jpg found in annotations" % (image_identifier)
+            print
+            "Warning: No %s.jpg found in annotations" % (image_identifier)
 
             # vis_annotations(image_identifier, recs[image_identifier])
     return recs
@@ -186,16 +187,13 @@ def caltech_eval(detpath,
         lines = f.readlines()
     image_identifiers = [x.strip() for x in lines]
 
-    # govind: If testing is performed after training, then
-    # the ground-truth annots would already be present
-    # as cachefile
-    # govind: unconditionally parse annotations
-    if 1:  # not os.path.isfile(cachefile):
+    if 1: # load new anotations unconditionally in case test data have changed
         # load annots
         # govind: recs is a dictionary with <image_identifier> as keys
         recs = parse_caltech_annotations(image_identifiers, annopath)
         # save
-        print 'Saving cached annotations to {:s}'.format(cachefile)
+        print
+        'Saving cached annotations to {:s}'.format(cachefile)
         with open(cachefile, 'w') as f:
             cPickle.dump(recs, f)
     else:
@@ -208,6 +206,7 @@ def caltech_eval(detpath,
     # dictionary class_recs which is specific to this class
     class_recs = {}
     npos = 0
+    nimg = len(image_identifiers)
     for image_identifier in image_identifiers:
         R = [obj for obj in recs[image_identifier] if obj['name'] == classname]
         bbox = np.array([x['bbox'] for x in R])
@@ -231,18 +230,25 @@ def caltech_eval(detpath,
     confidence = np.array([float(x[1]) for x in splitlines])
     BB = np.array([[float(z) for z in x[2:]] for x in splitlines])
 
+    # Remove low confidence
+    confidence = confidence[confidence > 0.1]
     # sort by confidence
     sorted_ind = np.argsort(-confidence)
-    sorted_scores = np.sort(-confidence)
+
     if len(BB) != 0:  # check if array is empty
         BB = BB[sorted_ind, :]
     image_ids = [image_ids[x] for x in sorted_ind]
 
-    # TODO: add miss rate
     # go down dets and mark TPs and FPs
     nd = len(image_ids)
     tp = np.zeros(nd)
     fp = np.zeros(nd)
+
+    # TODO: add miss rate
+    tot_tp = 0.
+    tot_fp = 0.
+    MR = np.ones(nd)
+    FPPI = np.zeros(nd)
     for d in range(nd):
         # load all ground truths for this image
         R = class_recs[image_ids[d]]
@@ -275,10 +281,16 @@ def caltech_eval(detpath,
                 if not R['det'][jmax]:
                     tp[d] = 1.
                     R['det'][jmax] = 1
+                    tot_tp += 1.
                 else:
                     fp[d] = 1.
+                    tot_fp += 1.
         else:
             fp[d] = 1.
+            tot_fp += 1.
+
+        MR[d] = 1. - tot_tp/npos
+        FPPI[d] = tot_fp/nimg
 
     # compute precision recall
     fp = np.cumsum(fp)
@@ -289,4 +301,4 @@ def caltech_eval(detpath,
     prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
     ap = caltech_ap(rec, prec, use_07_metric)
 
-    return rec, prec, ap
+    return rec, prec, ap, MR, FPPI

@@ -4,8 +4,11 @@
 # Licensed under The MIT License [see LICENSE for details]
 # Written by Ross Girshick
 # --------------------------------------------------------
-
+import datetime
+import matplotlib.pyplot as plt
 import os
+
+import time
 from datasets.imdb import imdb
 import datasets.ds_utils as ds_utils
 import xml.etree.ElementTree as ET
@@ -114,7 +117,8 @@ class caltech(imdb):
         if 0:  # os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
-            print '{} gt roidb loaded from {}'.format(self.name, cache_file)
+            print
+            '{} gt roidb loaded from {}'.format(self.name, cache_file)
             return roidb
         else:
             imagesetfile = os.path.join(self._data_path, 'ImageSets',
@@ -138,7 +142,8 @@ class caltech(imdb):
 
             with open(cache_file, 'wb') as fid:
                 cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
-            print 'wrote gt roidb to {}'.format(cache_file)
+            print
+            'wrote gt roidb to {}'.format(cache_file)
             return gt_roidb
 
     # govind: This alt-opt training log doesn't print the
@@ -157,7 +162,8 @@ class caltech(imdb):
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
-            print '{} ss roidb loaded from {}'.format(self.name, cache_file)
+            print
+            '{} ss roidb loaded from {}'.format(self.name, cache_file)
             return roidb
 
         if int(self._year) == 2007 or self._image_set != 'test':
@@ -168,7 +174,8 @@ class caltech(imdb):
             roidb = self._load_selective_search_roidb(None)
         with open(cache_file, 'wb') as fid:
             cPickle.dump(roidb, fid, cPickle.HIGHEST_PROTOCOL)
-        print 'wrote ss roidb to {}'.format(cache_file)
+        print
+        'wrote ss roidb to {}'.format(cache_file)
 
         return roidb
 
@@ -195,7 +202,8 @@ class caltech(imdb):
     #   vgg16_rpn_stage2_iter_100_proposals.pkl
     def _load_rpn_roidb(self, gt_roidb):
         filename = self.config['rpn_file']
-        print 'loading {}'.format(filename)
+        print
+        'loading {}'.format(filename)
         assert os.path.exists(filename), \
             'rpn data not found at: {}'.format(filename)
         with open(filename, 'rb') as f:
@@ -301,7 +309,8 @@ class caltech(imdb):
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
-            print 'Writing {} caltech results file'.format(cls)
+            print
+            'Writing {} caltech results file'.format(cls)
             filename = self._get_caltech_results_file_template().format(cls)
             with open(filename, 'wt') as f:
                 for im_ind, index in enumerate(self.image_index):
@@ -325,6 +334,7 @@ class caltech(imdb):
                                     self._image_set + '.txt')
 
         cachedir = os.path.join(self._devkit_path, 'annotations_cache')
+        resultsdir = os.path.join(self._devkit_path, 'results')
         aps = []
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)
@@ -337,13 +347,31 @@ class caltech(imdb):
             filename = self._get_caltech_results_file_template().format(cls)
             # govind: It's calling a function which will give Precision, Recall and
             # average precision if we pass it the _results_file
-            rec, prec, ap = caltech_eval(
+            rec, prec, ap, mr, fppi = caltech_eval(
                 filename, annopath, imagesetfile, cls, cachedir, ovthresh=0.5, use_07_metric=True)
             aps += [ap]
             print('AP for {} = {:.4f}'.format(cls, ap))
             with open(os.path.join(output_dir, cls + '_pr.pkl'), 'w') as f:
                 cPickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
+        # Caltech dataset reports performance in log-average miss rate on results with mr between 1e-2 and 0.
+        mr4i = next(idx for idx, element in enumerate(fppi) if element > 1e-4)
+        mr2i = next(idx for idx, element in enumerate(fppi) if element > 1e-2)
+        try:
+            mr0i = next(idx for idx, element in enumerate(fppi) if element > 1.)
+        except StopIteration:
+            mr0i = -1
+        print(fppi)
+        print(mr4i, mr2i, mr0i)
+        mr4 = mr[mr4i:mr0i]
+        mr2 = mr[mr2i:mr0i]
+        log_average_mr2 = np.exp(np.mean(np.log(mr2)))
+        log_average_mr4 = np.exp(np.mean(np.log(mr4)))
+        np.set_printoptions(precision=3)
         # govind: Computing Mean average precision
+        print("Miss rate: {}".format(mr))
+        print("FPPI:      {}".format(fppi))
+        print('~~~~~~~~')
+        print("LAMR: {} ({})".format(log_average_mr2, log_average_mr4))
         print('Mean AP = {:.4f}'.format(np.mean(aps)))
         print('~~~~~~~~')
         print('Results:')
@@ -359,11 +387,27 @@ class caltech(imdb):
         print('-- Thanks, The Management')
         print('--------------------------------------------------------------')
 
+        now = str(datetime.datetime.now())
+        with open(os.path.join(resultsdir, now + "-results.txt"), "w") as file:
+            file.write("Miss rate: {}\n".format(mr))
+            file.write("FPPI:      {}\n".format(fppi))
+            file.write("LAMR: {} ({})\n".format(log_average_mr2, log_average_mr4))
+        plt.scatter(fppi, mr)
+        plt.ylabel("Miss rate")
+        plt.xlabel("FPPI")
+        plt.yscale('log')
+        plt.xscale('log')
+        plt.title("Caltech results")
+        plt.savefig(os.path.join(resultsdir, now + "-graph.png"), orientation="landscape", bbox_inches='tight')
+
     def _do_matlab_eval(self, output_dir='output'):
         assert False  # govind: This will not be called
-        print '-----------------------------------------------------'
-        print 'Computing results with the official MATLAB eval code.'
-        print '-----------------------------------------------------'
+        print
+        '-----------------------------------------------------'
+        print
+        'Computing results with the official MATLAB eval code.'
+        print
+        '-----------------------------------------------------'
         path = os.path.join(cfg.ROOT_DIR, 'lib', 'datasets',
                             'VOCdevkit-matlab-wrapper')
         cmd = 'cd {} && '.format(path)
